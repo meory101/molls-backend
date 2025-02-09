@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Models\User;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Validator;
 
 class AuthController extends Controller
 {
@@ -23,35 +25,52 @@ class AuthController extends Controller
                 'user'  => $user,
                 'token' =>$user->createToken('token')->plainTextToken
             ], 200);
+        }else{
+            return response()->json([], 500);
         }
       
     }
     public function login(Request $request)
     {
-        $credentials = $request->validate([
-            'email' => 'required|string|email',
-            'password' => 'required|string',
-        ]);
-
-        if (Auth::attempt($credentials)) {
-            $request->session()->regenerate();
-
-            return redirect()->intended('dashboard');
+        $validator = Validator::make(
+            $request->all(),
+            [
+                'email' => 'required|email',
+                'password' =>
+                'required|min:6|regex:/^(?=.*?[A-Z])(?=.*?[a-z])(?=.*?[0-9])/'
+            ]
+        );
+        if ($validator->fails()) {
+            return json_encode([
+                'message' => $validator->errors()
+            ]);
         }
-                
-        return back()->withErrors([
-            'email' => 'The provided credentials do not match our records.',
+
+        $user =  User::where('email', $request->email)->first();
+
+        if ($user) {
+            if (!Hash::check($request->password, $user->password)) {
+                return json_encode([
+                    'message' => [
+                        'name' =>
+                        'Password is wrong'
+                    ]
+                ]);
+            }
+
+            return json_encode([
+                'user' =>  $user,
+                'token' =>  $user->createToken('token')->plainTextToken
+            ]);
+        }
+        return json_encode([
+            'status' => 'failed',
+            'message' => [
+                'email' =>
+                'Email is not found'
+            ]
         ]);
     }
 
-    public function logout(Request $request)
-    {
-        Auth::logout();
-
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
-
-        return redirect('/');
-    }
 }
 
